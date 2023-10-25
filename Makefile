@@ -19,3 +19,5 @@ Principal_Program.o : mod_precision.o mod_maillage.o mod_sortie.o Principal_Prog
 
 clean :.
 	rm *.o *.mod *.vtk
+
+#*.o *.mod 

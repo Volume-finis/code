@@ -12,22 +12,37 @@ program Principal_Program
     real(PR), dimension(:,:), allocatable   :: milieu_arete, coord_noeud !tq coord_noeud(i,1) = abscisse noeud i 
     integer, dimension(:,:), allocatable    :: arete_maille, noeud_maille, maille_arete
 
-    real(PR)                                :: tmax, D, cfl, Tinit, Tg, Td, Phi_b, Rmax, Rint, Rext
+    real(PR)                                :: tmax, D, cfl, Tinit, Rmax, Rint, Rext, T1, T2, T3
     real(PR)                                :: delta_t, sum_arete, F
     real(PR)                                :: Sol_exact, sum_Sol_exact_carre, X_centre,Y_centre, X_sum, Y_sum, Rayon
-    real(PR)                                :: Err_absolue, Err_N_Euclidienne, sum
-    real(PR)                                :: L_triangle_min, Const1_Cas3, Const2_Cas3
+    real(PR)                                :: Err_N_Euclidienne, sum
+    real(PR)                                :: L_triangle_min
 
-    integer                                 :: nb_aretes, nb_noeuds, nb_mailles
-    integer                                 :: i, j, n, a, M_1, M_2, nmax, m, Cas_Test
+    integer                                 :: nb_aretes, nb_mailles
+    integer                                 :: i, j, n, a, M_1, M_2, nmax, m, Cas_Test, Affichage_vtk
 
     character(len=20)                       :: Ntest
 
     character(len=30) :: fichier_maillage
 
-    Cas_Test = 3
+    print*, "Afin de résoudre l'approximation en volumes finis de l'équation de la chaleur " 
+    print*, "en dimension 2, vous aurez le choix d'effectuer 4 tests sur des structures différentes :" 
+    print*, " "
+    print*, "- Cas test 1 : Carré", "                  ", "- Cas test 2 : Cercle"
+    print*, "- Cas test 3 : Couronne", "               ", "- Cas test 4 : Domaine quelconque"
+    print*, "Quels cas choisissez vous d'étudier (entre 1 et 4) : " 
+    ! Cas_Test = 4
+    read*, Cas_Test
 
-    
+    if (Cas_Test /= 1 .AND. Cas_Test /= 2 .AND. Cas_Test /= 3 .AND. Cas_Test /= 4)then 
+        stop "Vous n'avez pas choisi un Cas Test existant"
+    end if 
+
+    print*, "Voulez-vous afficher les fichiers .vtk dans votre dossier :"
+    print*, "Si oui tappez 1"
+    read*, Affichage_vtk        !! permet d'écrire ou non les fichiers .vtk pour les utiliser avec paraview
+    ! Affichage_vtk = 0
+
     write(Ntest,*) Cas_Test
 
     open(11, file="Donnee_Cas_test"//trim(adjustl(Ntest))//".dat")
@@ -35,10 +50,11 @@ program Principal_Program
         read(11,*) D
         read(11,*) cfl
         read(11,*) Tinit
-        read(11,*) Tg
-        read(11,*) Td  !ou Tb c'est la valeur de référence
-        read(11,*) Phi_b
-        if (Cas_Test==2) then 
+        read(11,*) T1  ! Tg
+        read(11,*) T2  ! Td ou Tb c'est la valeur de référence
+        if (Cas_Test==1 .OR. Cas_Test ==4) then 
+            read(11,*) T3  ! Phi_b
+        elseif (Cas_Test==2) then 
             read(11,*) Rmax
         end if
         if (Cas_Test==3) then 
@@ -48,7 +64,11 @@ program Principal_Program
         read(11,*) fichier_maillage 
     close(11)
 
-    print*, tmax, D, cfl, Tinit, Tg, Td, Phi_b
+    print*, "--------------------------------"
+    print*, "Les paramètres utilisés : "
+    print*, "Tmax = ", tmax,", D = ", D, ", cfl = ", cfl, ", Tinit = ", Tinit
+    print*,  "Tg = ", T1, ", Tb = ", T2, ", Phi_b = ", T3
+    print*, "--------------------------------"
 
     call maillage(fichier_maillage , nb_mailles, nb_aretes &
         & , coord_noeud, noeud_maille, aire_maille, l_arete, d_arete &
@@ -70,8 +90,9 @@ program Principal_Program
 
     end do 
 
-    print*, "delta_t = ", delta_t  !! =  2.8887438505932329E − 004
-    ! print*, int(tmax / delta_t) 
+    print*, "--------------------------------"
+    print*, "delta_t = ", delta_t  !! delta_t =  2.8887438505932329E − 004 pour "cas_1d.mesh"
+
 
     T = Tinit
     Tnp1 = Tinit
@@ -86,14 +107,14 @@ program Principal_Program
             M_2 = maille_arete(a,2)
 
             if ( M_2 == 0 ) then !arete est de bord
-                if ((cl_arete(a)) == 10) then  
-                    F = - D * (Tg-T(M_1))/ d_arete(a)
+                if ((cl_arete(a)) == 10) then   !! 7 ou 10
+                    F = - D * (T1-T(M_1))/ d_arete(a)
                     Tnp1(M_1) = Tnp1(M_1) - (delta_t/aire_maille(M_1))* F * l_arete(a)
-                elseif ((cl_arete(a)) == 11) then
-                    F = - D * (Td-T(M_1))/ d_arete(a)
+                elseif ((cl_arete(a)) == 11) then !! 6 ou 11
+                    F = - D * (T2-T(M_1))/ d_arete(a)
                     Tnp1(M_1) = Tnp1(M_1) - (delta_t/aire_maille(M_1))* F * l_arete(a)
                 else ! cl_arete(a)) == 20
-                    F = Phi_b
+                    F = T3 !!Phi_b
                     Tnp1(M_1) = Tnp1(M_1) - (delta_t/aire_maille(M_1))* F * l_arete(a)
                 end if 
             
@@ -106,38 +127,26 @@ program Principal_Program
                
         end do 
 
-
-        if (Cas_Test == 1) then
-            T = Tnp1
-            if (modulo(n, 10) == 0) then
-                call sortie (n, Tnp1, coord_noeud, noeud_maille)
-            end if 
-        elseif (Cas_Test == 2) then
-            T = Tnp1
-            if (modulo(n, 5) == 0) then
-                call sortie (n, Tnp1, coord_noeud, noeud_maille)
-            end if 
-        elseif (Cas_Test == 3) then
-
+        if (Cas_Test == 3) then
             if (n==nmax) then 
                 if (Norme_infini(T) / Norme_infini(Tnp1)  < 0.99) then 
-                    print*, "Pas en stationnaire, augmentez tmax"
-                else 
+                    print*, "Pas en stationnaire, augmentez tmax"  !! permet de calculer l'erreur en 
+                else                                               !! stationnaire
                     print*, "Vous êtes en stationnaire, vous pouvez utiliser tmax"
                 end if 
             end if
+        end if 
 
-            T = Tnp1
-            if (modulo(n, 10) == 0) then
-                call sortie (n, Tnp1, coord_noeud, noeud_maille)
-            end if 
-        end if
-
-        
+        T = Tnp1
+    
+        if (Affichage_vtk == 1 .AND.  (modulo(n, 20) == 0)) then  !! Augmenter le quotient si vous avez 
+            call sortie (n, Tnp1, coord_noeud, noeud_maille)      !! trop de fichiers .vtk et diminuez
+        end if                                                    !! le pour un écoulement du temps plus 
+                                                                  !! précis. Ex mettre 50 pour Cas = 4 
+                                                                  !! et 10 pour les autres cas
     end do 
 
-    Err_absolue = 0._PR
-    Err_N_Euclidienne = 0._PR
+    Err_N_Euclidienne = 0._PR      !! Cela va nous permettre de calculer la norme 2 relative global
     sum_Sol_exact_carre = 0._PR
 
     L_triangle_min = 10._PR
@@ -161,7 +170,7 @@ program Principal_Program
                 sum = sum + (2/(i*pi))*((-1)**i) * exp(-D*(i*pi)*(i*pi)*nmax * delta_t)*sin(i*pi*X_centre)
             end do 
 
-            Sol_exact = Tg + (Td-Tg)*(X_centre + sum)
+            Sol_exact = T1 + (T2-T1)*(X_centre + sum)
 
             
         elseif (Cas_Test == 2) then !le cercle
@@ -189,15 +198,11 @@ program Principal_Program
 
             Rayon = sqrt(X_centre*X_centre +Y_centre*Y_centre)
 
-            Const1_Cas3 = (Td-Tg)/log(Rext/Rint)
-            Const2_Cas3 = Td -(Td-Tg)* log(Rext)/log(Rext/Rint)
-
-            Sol_exact = Const1_Cas3 * Rayon + Const2_Cas3
-            print*, Sol_exact, Tnp1(m)
+            Sol_exact = T1 + (T2-T1)*log(Rayon/Rint)/log(Rext/Rint)
         
+        else !! pour le Cas 4
+            stop "Pas de calcul d'erreur pour le Cas test"
         end if
-
-        Err_absolue = Err_absolue + abs (Sol_exact-Tnp1(m)) * aire_maille(m)
 
         sum_Sol_exact_carre = sum_Sol_exact_carre + Sol_exact * Sol_exact * aire_maille(m)
         Err_N_Euclidienne = Err_N_Euclidienne + ((Sol_exact - Tnp1(m))**2) * aire_maille(m)
@@ -205,13 +210,12 @@ program Principal_Program
 
     end do 
 
-    Err_absolue = Err_absolue/nb_mailles 
     
     Err_N_Euclidienne = Err_N_Euclidienne / (sum_Sol_exact_carre)
     Err_N_Euclidienne = sqrt(Err_N_Euclidienne)
 
     print*, "Hauteur min des mailles triangulaires = ", L_triangle_min
-    print*, "Erreur Absolue est : ", Err_absolue
+    print*, "--------------------------------"
     print*, "Erreur Euclidienne / relative est : ", Err_N_Euclidienne !! il s'agit de l'erreur relative global
    
    
@@ -258,11 +262,11 @@ function T1d_axi(t,r) result(y)
   
     !--- coeff cn
     do n=1,20
-       c(n) = 2 * (Tinit - Td) / ( z(n) * Bessel_JN(1,z(n)) )
+       c(n) = 2 * (Tinit - T2) / ( z(n) * Bessel_JN(1,z(n)) )
     end do
   
     !--- T exacte
-    y  = Td
+    y  = T2
     do n=1,20
        y = y + c(n) * exp(-z(n)**2 * D/Rmax**2 * t) * Bessel_JN(0,r*z(n)/Rmax)
     end do
